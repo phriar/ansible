@@ -1,0 +1,16 @@
+*.retry
+*.pyc
+__pycache__/
+.vagrant/
+.molecule/
+
+# Never commit unencrypted vault files
+# (encrypt first with: ansible-vault encrypt <file>)
+**/vault.yml
+!**/.gitignore
+
+# Sensitive files
+*.pem
+*.key
+*.crt
+inventory/*/group_vars/*/vault

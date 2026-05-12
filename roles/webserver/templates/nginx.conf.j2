@@ -1,0 +1,30 @@
+# Managed by Ansible — do not edit manually
+# Role: webserver  Template: nginx.conf.j2
+
+user www-data;
+worker_processes {{ webserver_worker_processes }};
+pid /run/nginx.pid;
+
+events {
+    worker_connections {{ webserver_worker_connections }};
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    types_hash_max_size 2048;
+    server_tokens off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+    error_log  /var/log/nginx/error.log;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+
+    include /etc/nginx/sites-enabled/*.conf;
+}

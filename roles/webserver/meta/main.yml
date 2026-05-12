@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  author: your_name
+  description: Install and configure nginx webserver
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - "22.04"
+        - "24.04"
+
+dependencies:
+  - role: common

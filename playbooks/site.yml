@@ -1,0 +1,7 @@
+---
+# Master playbook — runs all roles against all groups.
+# Usage: ansible-playbook playbooks/site.yml
+
+- import_playbook: common.yml
+- import_playbook: webservers.yml
+- import_playbook: databases.yml

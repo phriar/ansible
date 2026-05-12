@@ -1,0 +1,39 @@
+---
+- name: Install common packages
+  ansible.builtin.package:
+    name: "{{ common_packages }}"
+    state: present
+  tags: packages
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+  notify: Restart cron
+  tags: timezone
+
+- name: Configure NTP
+  ansible.builtin.template:
+    src: ntp.conf.j2
+    dest: /etc/ntp.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart NTP
+  tags: ntp
+
+- name: Apply sysctl settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop: "{{ sysctl_settings | dict2items }}"
+  tags: sysctl
+
+- name: Create ops user
+  ansible.builtin.user:
+    name: "{{ ops_user }}"
+    groups: sudo
+    shell: /bin/bash
+    state: present
+  tags: users

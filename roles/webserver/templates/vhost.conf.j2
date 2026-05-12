@@ -1,0 +1,24 @@
+# Managed by Ansible — do not edit manually
+# Role: webserver  Template: vhost.conf.j2
+
+server {
+    listen {{ webserver_port }};
+{% if item.ssl | default(false) %}
+    listen {{ webserver_ssl_port }} ssl;
+    ssl_certificate     /etc/ssl/certs/{{ item.name }}.crt;
+    ssl_certificate_key /etc/ssl/private/{{ item.name }}.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+{% endif %}
+
+    server_name {{ item.server_name }};
+    root        {{ item.root }};
+    index       {{ item.index | default('index.html') }};
+
+    access_log /var/log/nginx/{{ item.name }}_access.log;
+    error_log  /var/log/nginx/{{ item.name }}_error.log;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

@@ -1,0 +1,9 @@
+---
+env: staging
+ntp_servers:
+  - 0.pool.ntp.org
+
+dns_servers:
+  - 1.1.1.1
+
+timezone: UTC

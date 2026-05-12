@@ -1,0 +1,16 @@
+---
+# Install with: ansible-galaxy install -r requirements.yml
+#               ansible-galaxy collection install -r requirements.yml
+
+collections:
+  - name: ansible.posix
+    version: ">=1.5"
+  - name: community.general
+    version: ">=7.0"
+  - name: community.mysql
+    version: ">=3.0"
+
+roles: []
+  # Example:
+  # - name: geerlingguy.nginx
+  #   version: "3.2.0"
