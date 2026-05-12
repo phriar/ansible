@@ -1,0 +1,43 @@
+---
+# Variables for playbooks/deploy_vm.yml
+# Sensitive values (vcenter_password) live in group_vars/all/vault.yml
+# Override any of these on the CLI:  -e vm_name=myserver -e vm_ip=10.0.1.50
+
+# --- vCenter / ESXi connection ---
+vcenter_hostname: vcenter.example.com     # vCenter FQDN or IP (use ESXi IP for standalone hosts)
+vcenter_username: administrator@vsphere.local
+# vcenter_password comes from vault: {{ vault_vcenter_password }}
+
+vcenter_datacenter: Datacenter
+vcenter_cluster: Cluster01                # Leave blank and set vcenter_esxi_host for standalone ESXi
+vcenter_esxi_host: esxi01.example.com     # Target ESXi host within the cluster
+vcenter_datastore: datastore01            # Datastore to place the VM disks on
+vcenter_folder: /Datacenter/vm            # vCenter folder path for the new VM
+
+# --- Source template ---
+vm_template: ubuntu2404-template          # Name of the template in vCenter
+
+# --- New VM identity ---
+vm_name: new-server-01                    # vCenter display name + OS hostname
+vm_domain: example.com                    # DNS domain appended to hostname
+
+# --- New VM hardware (optional overrides — template values used if omitted) ---
+vm_num_cpus: 2
+vm_memory_mb: 4096
+vm_disk_gb: 50                            # Set to 0 to keep template disk size
+
+# --- New VM networking ---
+vm_network_label: "VM Network"            # Port group name in vCenter
+vm_ip: 10.0.1.50
+vm_netmask: 255.255.255.0
+vm_gateway: 10.0.1.1
+vm_dns_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+
+# --- Guest OS customization ---
+# For Linux: requires open-vm-tools + perl installed in the template
+# For Windows: requires sysprep; set vm_is_windows: true and fill in product_id
+vm_is_windows: false
+vm_timezone: "UTC"                        # Linux: Olson tz (e.g. "America/New_York")
+                                          # Windows: numeric index (e.g. 85 = GMT Standard Time)

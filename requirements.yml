@@ -9,6 +9,8 @@ collections:
     version: ">=7.0"
   - name: community.mysql
     version: ">=3.0"
+  - name: community.vmware
+    version: ">=4.0"
 
 roles: []
   # Example:
