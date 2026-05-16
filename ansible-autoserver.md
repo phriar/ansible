@@ -109,11 +109,22 @@ Autoserver roles (single VM):
 
 Run **once** on the internet-connected VM before OVA export. Pulls all dependencies, stages collections and pip wheels for offline use, and configures nginx.
 
+> **You do not need to create any directories before running this script.** The first thing it does is create the full `/opt/repo/` tree. Just copy the script onto a fresh Ubuntu 22.04 VM and run it as root:
+> ```bash
+> sudo bash bootstrap.sh
+> ```
+
 ```bash
 #!/bin/bash
 # /opt/repo/bootstrap.sh
 # Run as root on internet-connected network before OVA export
 set -e
+
+# ── Create full directory tree first ─────────────────────────────────────────
+# Done at the top so every subsequent step has its target directory ready.
+echo "=== Creating directory structure ==="
+mkdir -p /opt/repo/{ova/{windows,rhel,vendor},iso,pip-cache,collections,apt-cache}
+mkdir -p /opt/repo/playbooks/{inventory,group_vars,templates,roles}
 
 echo "=== Installing system packages ==="
 apt-get update
@@ -141,7 +152,6 @@ pip3 install --break-system-packages \
   requests-ntlm
 
 echo "=== Caching pip wheels for offline use ==="
-mkdir -p /opt/repo/pip-cache
 pip3 download \
   pyVmomi pywinrm requests requests-credssp \
   requests-kerberos requests-ntlm \
@@ -157,7 +167,6 @@ ansible-galaxy collection install \
   microsoft.ad
 
 echo "=== Downloading collections for offline install ==="
-mkdir -p /opt/repo/collections
 ansible-galaxy collection download \
   community.vmware \
   ansible.windows \
@@ -166,9 +175,6 @@ ansible-galaxy collection download \
   community.general \
   microsoft.ad \
   -p /opt/repo/collections
-
-echo "=== Creating directory structure ==="
-mkdir -p /opt/repo/{ova/{windows,rhel,vendor},iso,playbooks/{inventory,group_vars,templates,roles},pip-cache,collections,apt-cache}
 
 echo "=== Caching apt packages for offline use ==="
 apt-get install -y --download-only \
