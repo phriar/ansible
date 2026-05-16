@@ -18,6 +18,7 @@ apt-get install -y \
   ansible \
   python3-pip \
   python3-venv \
+  python3-dev \
   nginx \
   nfs-kernel-server \
   git \
@@ -26,7 +27,9 @@ apt-get install -y \
   unzip \
   sshpass \
   tree \
-  jq
+  jq \
+  libkrb5-dev \
+  krb5-multidev
 
 # ── Python dependencies ───────────────────────────────────────────────────────
 echo "=== Installing Python dependencies ==="
