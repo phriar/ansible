@@ -101,6 +101,7 @@ systemctl restart nginx
 
 # ── Ansible config ────────────────────────────────────────────────────────────
 echo "=== Writing ansible.cfg ==="
+mkdir -p /etc/ansible
 cat > /etc/ansible/ansible.cfg << 'CFGEOF'
 [defaults]
 inventory           = /opt/repo/playbooks/autoserver/inventory
