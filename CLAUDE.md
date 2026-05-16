@@ -6,54 +6,97 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install Galaxy dependencies (required before first run)
-ansible-galaxy install -r requirements.yml
 ansible-galaxy collection install -r requirements.yml
 
+# Run from autoserver/ directory for all autoserver playbooks
+cd autoserver
+
 # Dry-run against staging
-ansible-playbook -i inventories/staging playbooks/site.yml --check --diff
+ansible-playbook deploy-esxi.yml --check --diff --ask-vault-pass
 
-# Run against production
-ansible-playbook -i inventories/production playbooks/site.yml
+# Deploy all VMs to standalone ESXi
+ansible-playbook deploy-esxi.yml --ask-vault-pass
 
-# Target a single host or tag
-ansible-playbook playbooks/site.yml --limit web01.example.com
-ansible-playbook playbooks/site.yml --tags packages
+# Deploy one group (rhel | windows | vendor)
+ansible-playbook deploy-esxi.yml --tags rhel --ask-vault-pass
 
-# Deploy a VM from vCenter template
-ansible-playbook playbooks/deploy_vm.yml -e vm_name=web01 -e vm_ip=10.0.1.60
+# Deploy a single VM by name
+ansible-playbook deploy-esxi.yml -e vm_filter=infoblox-01 --ask-vault-pass
+
+# Deploy to vCenter (once vCenter is up)
+ansible-playbook deploy-vcenter.yml --ask-vault-pass
+
+# Configure deployed VMs post-deploy
+ansible-playbook configure-rhel-base.yml -l rocky-01 --ask-vault-pass
+ansible-playbook configure-windows-base.yml -l win-server-01 --ask-vault-pass
+
+# Clone a VM from a vCenter template (alternative to OVA deploy)
+ansible-playbook deploy-vm-template.yml --ask-vault-pass
 
 # Vault operations
-ansible-vault encrypt group_vars/all/vault.yml
-ansible-vault edit group_vars/all/vault.yml
-ansible-playbook playbooks/site.yml --ask-vault-pass
-ansible-playbook playbooks/site.yml --vault-password-file ~/.vault_pass
+ansible-vault encrypt inventory/group_vars/all/vault.yml
+ansible-vault edit inventory/group_vars/all/vault.yml
 
-# Initialize a new role scaffold
-ansible-galaxy role init roles/<role_name>
+# Test connectivity
+ansible rhel    -m ansible.builtin.ping
+ansible windows -m ansible.windows.win_ping --ask-vault-pass
+
+# Bootstrap the autoserver (run once, on the internet-connected VM, as root)
+sudo bash autoserver/bootstrap.sh
 ```
 
 ## Architecture
 
-**Entry points** are playbooks under `playbooks/`. `site.yml` is the master that imports `common.yml`, `webservers.yml`, and `databases.yml` in order. `deploy_vm.yml` is a standalone playbook that runs against `localhost` to provision a VM from a vCenter template via the `community.vmware` collection.
+The repo is organised around one project: an **autoserver** — an Ubuntu VM that runs as both an Ansible control node and an nginx OVA/ISO file server, designed to be exported as an OVA and deployed into an air-gapped network.
 
-**Variable precedence** (low → high):
-1. `roles/<role>/defaults/main.yml` — safe overridable defaults
-2. `group_vars/all/vars.yml` — global non-sensitive defaults
-3. `inventories/<env>/group_vars/all.yml` — environment-specific overrides (env name, NTP, DNS, timezone)
-4. `roles/<role>/vars/main.yml` — high-priority role vars, not meant to be overridden
-5. CLI `-e` extra vars — highest priority
+```
+Internet-connected              Air-gapped network
+──────────────────              ──────────────────
+1. Build Ubuntu VM              5. Deploy autoserver OVA to ESXi
+2. Run bootstrap.sh             6. Boot — everything works offline
+3. Stage OVAs and ISOs          7. Run playbooks to deploy all VMs
+4. Export as OVA  ─────────────────────────────────────────▶
+```
 
-**Secrets** live exclusively in `group_vars/all/vault.yml` (encrypted with `ansible-vault`). Convention: vault variables are prefixed `vault_` and re-exposed via plain names in `group_vars/all/vars.yml`. `vault.yml` must be encrypted before committing — it is gitignored when unencrypted by the pattern in `.gitignore`.
+**Entry points (all in `autoserver/`):**
 
-**Roles:**
-- `common` — applied to every host; installs packages, sets timezone/NTP, applies sysctl, creates the ops user. The `webserver` role declares a dependency on it via `meta/main.yml`.
-- `webserver` — installs nginx, renders `nginx.conf.j2` (validated with `nginx -t` before deploy), then loops over `webserver_vhosts` to create and symlink per-vhost configs.
+| Playbook | What it does |
+|---|---|
+| `deploy-esxi.yml` | Deploy VMs from local OVA repo to standalone ESXi |
+| `deploy-vcenter.yml` | Deploy VMs from local OVA repo to vCenter |
+| `deploy-vm-template.yml` | Clone a VM from a vCenter template (non-OVA approach) |
+| `configure-rhel-base.yml` | Post-deploy hardening for RHEL/Rocky VMs |
+| `configure-windows-base.yml` | Post-deploy config for Windows Server VMs |
 
-**Inventories** are fully separated by environment under `inventories/staging/` and `inventories/production/`. The default inventory in `ansible.cfg` points to production — always pass `-i inventories/staging` explicitly for staging runs. Host groups used: `[webservers]`, `[databases]`, `[cache]`, and the composite `[app:children]`.
+**VM Catalog (`autoserver/inventory/group_vars/all/vm_catalog.yml`):** Single source of truth for every VM — name, group, OVA path, datastore, port group, memory, CPU, disk, IP, OVF properties. The deploy playbooks loop over this list. Deploy by group with `--tags rhel/windows/vendor` or a single VM with `-e vm_filter=<name>`.
 
-**Galaxy collections** required: `ansible.posix`, `community.general`, `community.mysql`, `community.vmware` (versions pinned in `requirements.yml`).
+**Variable precedence (low → high):**
+1. `autoserver/inventory/group_vars/all/vars.yml` — ESXi/vCenter connection, nginx repo URL, NTP
+2. `autoserver/inventory/group_vars/all/vm_catalog.yml` — per-VM specs
+3. `autoserver/inventory/group_vars/all/vault.yml` — encrypted secrets (gitignored until encrypted)
+4. CLI `-e` extra vars
+
+**Secrets** live in `vault.yml` with `vault_` prefixes. The file is gitignored when unencrypted — encrypt before committing.
+
+**nginx file server:** `bootstrap.sh` configures nginx to serve `/opt/repo` at `http://autoserver/`. ESXi pulls OVAs directly from `http://autoserver/ova/<path>` — no file copy to the datastore needed. OVA paths in `vm_catalog.yml` are relative to `/opt/repo/ova/`.
+
+**Two-phase deployment:**
+- Phase 1 (ESXi-only): `deploy-esxi.yml` connects directly to ESXi via pyVmomi
+- Phase 2 (vCenter): `deploy-vcenter.yml` connects to vCenter; can specify cluster, folder, resource pool
+
+**Collections required:** `community.vmware`, `ansible.windows`, `community.windows`, `ansible.posix`, `community.general`, `microsoft.ad` — all in `requirements.yml`, all cached offline by `bootstrap.sh`.
+
+## Docs
+
+| File | Contents |
+|---|---|
+| `docs/autoserver-design.md` | Full design doc, architecture, pre-export checklist, quick reference |
+| `docs/windows-domain-join.md` | Domain join runbook for `poseidon.local` |
+| `docs/deploy-vm-template.md` | Reference for the vCenter template-clone approach |
+| `docs/ubuntu-ansible-setup.md` | Setting up Ubuntu as an Ansible control node |
 
 ## Requirements
 
 - Ansible >= 2.14, Python >= 3.9 on control node
-- SSH key at `~/.ssh/id_ed25519`; remote user is `ansible` with passwordless sudo
+- SSH key at `~/.ssh/id_ed25519` (or `~/.ssh/ansible_id_rsa` on the autoserver)
+- Remote user is `ansible` with passwordless sudo on Linux targets; WinRM with NTLM on Windows

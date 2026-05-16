@@ -1,3 +1,0 @@
----
-# High-priority vars — these override group_vars and host_vars.
-# Only put values here that must not be changed from outside this role.

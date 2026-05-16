@@ -1,15 +1,16 @@
 ---
 # Deploy a VM from a vCenter template, rename it, and assign a static IP.
+# Run from the autoserver/ directory — inventory/group_vars are loaded automatically.
 #
 # Prerequisites:
 #   - community.vmware collection installed (ansible-galaxy install -r requirements.yml)
 #   - Template has open-vm-tools + perl (Linux) or sysprep available (Windows)
-#   - vault_vcenter_password set in group_vars/all/vault.yml
+#   - vault_vcenter_password set in inventory/group_vars/all/vault.yml
 #
 # Usage:
-#   ansible-playbook playbooks/deploy_vm.yml
-#   ansible-playbook playbooks/deploy_vm.yml -e vm_name=web01 -e vm_ip=10.0.1.60
-#   ansible-playbook playbooks/deploy_vm.yml -e @playbooks/vars/deploy_vm.yml
+#   ansible-playbook deploy-vm-template.yml
+#   ansible-playbook deploy-vm-template.yml -e vm_name=web01 -e vm_ip=10.0.1.60
+#   ansible-playbook deploy-vm-template.yml -e @vars/deploy-vm-template.yml
 
 - name: Deploy VM from template
   hosts: localhost
@@ -17,8 +18,7 @@
   connection: local
 
   vars_files:
-    - vars/deploy_vm.yml
-    - "{{ playbook_dir }}/../group_vars/all/vars.yml"
+    - vars/deploy-vm-template.yml
 
   vars:
     vcenter_password: "{{ vault_vcenter_password }}"
