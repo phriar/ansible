@@ -1,0 +1,112 @@
+---
+# VM Catalog — single source of truth for every VM to be deployed.
+# Referenced by deploy-esxi.yml and deploy-vcenter.yml.
+#
+# Deploy all VMs:
+#   ansible-playbook deploy-esxi.yml --ask-vault-pass
+#
+# Deploy one group (rhel | windows | vendor):
+#   ansible-playbook deploy-esxi.yml --tags rhel --ask-vault-pass
+#
+# Deploy a single VM by name:
+#   ansible-playbook deploy-esxi.yml -e vm_filter=infoblox-01 --ask-vault-pass
+#
+# Fields:
+#   ova_file      — path relative to /opt/repo/ova/ (served by local nginx)
+#   networks      — OVF network name → target ESXi/vCenter port group
+#   disk_gb       — resize primary OS disk after deploy; 0 = keep OVA default
+#   vcenter_folder — vCenter VM folder; ignored for ESXi-direct deploys
+#   ovf_properties — OVF env properties injected at deploy time (vendor appliances)
+
+vms:
+
+  # ── RHEL / Rocky Linux ─────────────────────────────────────────────────────
+  # tag: --tags rhel
+
+  - name: rocky-01
+    group: rhel
+    ova_file: rhel/rocky-9.4.ova
+    datastore: datastore1
+    networks:
+      "VM Network": Management            # OVF internal name → your port group name
+    memory_mb: 4096
+    num_cpus: 2
+    disk_gb: 50                           # 0 = keep OVA default
+    ip: 192.168.100.101
+    netmask: 255.255.255.0
+    gateway: 192.168.100.1
+    power_on: true
+    wait_for_ip: true
+    vcenter_folder: /Datacenter/vm/RHEL
+
+  # ── Windows Server ─────────────────────────────────────────────────────────
+  # tag: --tags windows
+
+  - name: win-server-01
+    group: windows
+    ova_file: windows/windows-server-2022.ova
+    datastore: datastore1
+    networks:
+      "VM Network": Management
+    memory_mb: 8192
+    num_cpus: 4
+    disk_gb: 100
+    ip: 192.168.100.201
+    netmask: 255.255.255.0
+    gateway: 192.168.100.1
+    power_on: true
+    wait_for_ip: false                    # WinRM readiness verified in configure-windows-base.yml
+    vcenter_folder: /Datacenter/vm/Windows
+
+  # ── Vendor Appliances ──────────────────────────────────────────────────────
+  # tag: --tags vendor
+  # Vendor OVAs are deployed in one step — OVF properties configure them at first boot.
+  # disk_gb: 0 on all vendor VMs — they manage their own disk layout inside the OVA.
+
+  - name: infoblox-01
+    group: vendor
+    ova_file: vendor/infoblox-nios-9.0.ova
+    datastore: datastore1
+    networks:
+      "LAN1": Management                  # Infoblox OVF network name
+    memory_mb: 8192
+    num_cpus: 4
+    disk_gb: 0
+    ip: 192.168.100.50
+    netmask: 255.255.255.0
+    gateway: 192.168.100.1
+    power_on: true
+    wait_for_ip: true
+    vcenter_folder: /Datacenter/vm/Vendor
+    ovf_properties:
+      MGMT_IP:               "192.168.100.50"
+      MGMT_NETMASK:          "255.255.255.0"
+      MGMT_GATEWAY:          "192.168.100.1"
+      TEMP_LICENSE:          "vnios enterprise dns dhcp"
+      REMOTE_CONSOLE_ENABLED: "True"
+
+  - name: nsx-manager-01
+    group: vendor
+    ova_file: vendor/nsx-manager-4.x.ova
+    datastore: datastore1
+    networks:
+      "Network 1": Management             # NSX-T OVF network name — check OVA manifest if different
+    memory_mb: 16384
+    num_cpus: 4
+    disk_gb: 0
+    ip: 192.168.100.51
+    netmask: 255.255.255.0
+    gateway: 192.168.100.1
+    power_on: true
+    wait_for_ip: true
+    vcenter_folder: /Datacenter/vm/NSX
+    ovf_properties:
+      nsx_hostname:            "nsx-manager-01"
+      nsx_dns1:                "192.168.100.1"
+      nsx_domain:              "local"
+      nsx_gateway:             "192.168.100.1"
+      nsx_ip_0:                "192.168.100.51"
+      nsx_netmask_0:           "255.255.255.0"
+      nsx_ntp:                 "192.168.100.1"
+      nsx_passwd_0:            "{{ vault_nsx_admin_password }}"
+      nsx_cli_audit_passwd_0:  "{{ vault_nsx_audit_password }}"

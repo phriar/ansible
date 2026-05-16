@@ -1,0 +1,21 @@
+---
+# Autoserver nginx serves /opt/repo at http://<autoserver-ip>/
+# ESXi pulls OVAs from this URL — no file copy needed.
+repo_base_url: "http://autoserver/ova"    # update 'autoserver' to IP if DNS isn't available
+ova_local_path: "/opt/repo/ova"
+
+# Internal NTP — no internet in air-gapped env; point at DC or GPS source
+internal_ntp_server: "192.168.100.1"
+
+# ── Standalone ESXi ───────────────────────────────────────────────────────────
+esxi_host:     "192.168.100.10"
+esxi_user:     "root"
+esxi_password: "{{ vault_esxi_password }}"
+
+# ── vCenter (fill in once vCenter is deployed) ────────────────────────────────
+vcenter_host:       "vcenter.local"
+vcenter_user:       "administrator@vsphere.local"
+vcenter_password:   "{{ vault_vcenter_password }}"
+vcenter_datacenter: "Datacenter"
+vcenter_cluster:    "Cluster01"
+vcenter_folder:     "/Datacenter/vm"      # default folder; overridden per VM in vm_catalog.yml
