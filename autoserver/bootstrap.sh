@@ -100,9 +100,9 @@ systemctl restart nginx
 echo "=== Writing ansible.cfg ==="
 cat > /etc/ansible/ansible.cfg << 'CFGEOF'
 [defaults]
-inventory           = /opt/repo/playbooks/inventory
+inventory           = /opt/repo/playbooks/autoserver/inventory
 collections_path    = ~/.ansible/collections:/opt/repo/collections
-roles_path          = /opt/repo/playbooks/roles
+roles_path          = /opt/repo/playbooks/autoserver/roles
 host_key_checking   = False
 retry_files_enabled = False
 stdout_callback     = yaml
