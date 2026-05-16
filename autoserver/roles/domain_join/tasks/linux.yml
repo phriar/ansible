@@ -1,0 +1,54 @@
+---
+# Joins a RHEL/Rocky VM to Active Directory using realmd + sssd.
+# Requires network connectivity to the domain controller.
+
+- name: Install realmd and AD integration packages
+  ansible.builtin.dnf:
+    name:
+      - realmd
+      - sssd
+      - sssd-tools
+      - oddjob
+      - oddjob-mkhomedir
+      - adcli
+      - samba-common-tools
+      - krb5-workstation
+    state: present
+
+- name: Check if already joined to domain
+  ansible.builtin.command:
+    cmd: realm list
+  register: realm_list
+  changed_when: false
+
+- name: Join realm
+  ansible.builtin.shell:
+    cmd: >
+      echo '{{ domain_admin_pass }}' |
+      realm join
+      --user='{{ domain_admin_user }}'
+      {% if domain_ou %}--computer-ou='{{ domain_ou }}'{% endif %}
+      {{ domain_name }}
+  no_log: true
+  register: realm_join
+  changed_when: realm_join.rc == 0
+  failed_when:
+    - realm_join.rc != 0
+    - "'Already joined' not in realm_join.stderr"
+  when: domain_name not in realm_list.stdout
+
+- name: Enable automatic home directory creation on login
+  ansible.builtin.command:
+    cmd: authselect enable-feature with-mkhomedir
+  changed_when: true
+  notify: restart sssd
+
+- name: Ensure sssd is running
+  ansible.builtin.systemd:
+    name: sssd
+    state: started
+    enabled: true
+
+- name: Show domain join result
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} joined to {{ domain_name }}"

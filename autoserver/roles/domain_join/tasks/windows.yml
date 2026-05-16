@@ -1,0 +1,21 @@
+---
+# Joins a Windows Server VM to Active Directory.
+# The rename role should run before this so the computer gets the right name in AD.
+
+- name: Join domain
+  microsoft.ad.membership:
+    dns_domain_name:       "{{ domain_name }}"
+    domain_admin_user:     "{{ domain_admin_user }}"
+    domain_admin_password: "{{ domain_admin_pass }}"
+    ou_path:               "{{ domain_ou | default(omit) }}"
+    state: domain
+  register: domain_join_result
+  no_log: true
+  notify: reboot after domain join
+
+- name: Force handlers to run now (reboot before continuing)
+  ansible.builtin.meta: flush_handlers
+
+- name: Show domain join result
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }} joined to {{ domain_name }}"

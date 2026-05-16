@@ -1,0 +1,39 @@
+---
+# Configures a static IP using NetworkManager (nmcli).
+# Targets the active connection on network_interface (default: ens192).
+
+- name: Get active NetworkManager connection name for interface
+  ansible.builtin.shell:
+    cmd: "nmcli -t -f NAME,DEVICE con show --active | grep ':{{ network_interface }}$' | cut -d: -f1"
+  register: active_conn
+  changed_when: false
+  failed_when: active_conn.stdout | trim | length == 0 and nm_connection_name | length == 0
+
+- name: Resolve connection name to use
+  ansible.builtin.set_fact:
+    _nm_conn: "{{ nm_connection_name if nm_connection_name | length > 0 else active_conn.stdout | trim }}"
+
+- name: Apply static IP, gateway, and DNS via nmcli
+  ansible.builtin.command:
+    cmd: >
+      nmcli con mod "{{ _nm_conn }}"
+      ipv4.method manual
+      ipv4.addresses "{{ vm_ip }}/{{ vm_prefix }}"
+      ipv4.gateway "{{ vm_gateway }}"
+      ipv4.dns "{{ vm_dns_servers | join(' ') }}"
+      ipv4.ignore-auto-dns yes
+  register: nmcli_mod
+  changed_when: nmcli_mod.rc == 0
+
+- name: Bring connection up to apply changes
+  ansible.builtin.command:
+    cmd: "nmcli con up '{{ _nm_conn }}'"
+  when: nmcli_mod.changed
+
+- name: Show applied network config
+  ansible.builtin.debug:
+    msg:
+      - "Interface : {{ network_interface }} ({{ _nm_conn }})"
+      - "IP        : {{ vm_ip }}/{{ vm_prefix }}"
+      - "Gateway   : {{ vm_gateway }}"
+      - "DNS       : {{ vm_dns_servers | join(', ') }}"

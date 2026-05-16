@@ -1,0 +1,13 @@
+---
+- name: restart sssd
+  ansible.builtin.systemd:
+    name: sssd
+    state: restarted
+  listen: restart sssd
+
+- name: reboot after domain join
+  ansible.windows.win_reboot:
+    reboot_timeout: 600
+    post_reboot_delay: 60
+    msg: "Ansible domain join — rebooting"
+  listen: reboot after domain join

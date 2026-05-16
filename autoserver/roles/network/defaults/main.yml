@@ -1,0 +1,14 @@
+---
+# Defaults — override in host_vars/<hostname>.yml or with -e on the CLI
+
+vm_ip:      ""             # Static IP address to assign
+vm_prefix:  24             # CIDR prefix length — 24 = 255.255.255.0
+vm_gateway: ""             # Default gateway
+vm_dns_servers:            # DNS servers (list)
+  - 192.168.100.1
+
+# Linux only — NetworkManager interface and connection name.
+# ens192 is the VMware default for RHEL/Rocky on VMware.
+# Override in host_vars if your interface is named differently (e.g. ens160, eth0).
+network_interface:    "ens192"
+nm_connection_name:   ""   # Leave blank to auto-detect from the active connection

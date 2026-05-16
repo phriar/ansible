@@ -1,0 +1,16 @@
+---
+- name: Set computer name
+  ansible.windows.win_hostname:
+    name: "{{ vm_hostname }}"
+  register: hostname_result
+
+- name: Reboot to apply new hostname
+  ansible.windows.win_reboot:
+    reboot_timeout: 300
+    post_reboot_delay: 30
+    msg: "Ansible hostname rename — rebooting"
+  when: hostname_result.reboot_required
+
+- name: Show new hostname
+  ansible.builtin.debug:
+    msg: "Computer name set to {{ vm_hostname }}"

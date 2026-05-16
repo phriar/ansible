@@ -1,0 +1,17 @@
+---
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ vm_hostname }}"
+    use: systemd
+
+- name: Update /etc/hosts with FQDN
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: >-
+      127.0.1.1  {{ vm_hostname }}{{ '.' + vm_domain if vm_domain else '' }}  {{ vm_hostname }}
+    create: false
+
+- name: Show new hostname
+  ansible.builtin.debug:
+    msg: "Hostname set to {{ vm_hostname }}{{ '.' + vm_domain if vm_domain else '' }}"

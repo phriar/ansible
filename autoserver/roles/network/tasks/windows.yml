@@ -1,0 +1,48 @@
+---
+# Configures a static IP on the first active network adapter via PowerShell.
+# If the VM has multiple adapters, set network_interface to the adapter name
+# (e.g. "Ethernet0") in host_vars and the script will target it specifically.
+
+- name: Configure static IP, gateway, and DNS
+  ansible.windows.win_powershell:
+    script: |
+      $ErrorActionPreference = 'Stop'
+
+      # Target adapter — by name if specified, otherwise first active one
+      $adapterName = '{{ network_interface if network_interface != "ens192" else "" }}'
+      if ($adapterName) {
+          $adapter = Get-NetAdapter -Name $adapterName
+      } else {
+          $adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
+      }
+
+      if (-not $adapter) {
+          throw "No active network adapter found"
+      }
+
+      $ifIndex = $adapter.ifIndex
+      Write-Host "Configuring adapter: $($adapter.Name) (index $ifIndex)"
+
+      # Remove existing IP and default route so we can set a clean static config
+      Remove-NetIPAddress -InterfaceIndex $ifIndex -Confirm:$false -ErrorAction SilentlyContinue
+      Remove-NetRoute -InterfaceIndex $ifIndex -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
+
+      # Set static IP and gateway
+      New-NetIPAddress `
+          -InterfaceIndex $ifIndex `
+          -IPAddress '{{ vm_ip }}' `
+          -PrefixLength {{ vm_prefix }} `
+          -DefaultGateway '{{ vm_gateway }}'
+
+      # Set DNS servers
+      $dnsServers = @({{ vm_dns_servers | map('regex_replace', '^(.*)$', "'\\1'") | join(', ') }})
+      Set-DnsClientServerAddress -InterfaceIndex $ifIndex -ServerAddresses $dnsServers
+
+      Write-Host "IP      : {{ vm_ip }}/{{ vm_prefix }}"
+      Write-Host "Gateway : {{ vm_gateway }}"
+      Write-Host "DNS     : $($dnsServers -join ', ')"
+  register: net_result
+
+- name: Show network configuration output
+  ansible.builtin.debug:
+    msg: "{{ net_result.output }}"

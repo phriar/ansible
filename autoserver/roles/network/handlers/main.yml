@@ -1,0 +1,2 @@
+---
+# No handlers required — connection changes are applied inline via nmcli con up

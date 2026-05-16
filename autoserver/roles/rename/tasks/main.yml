@@ -1,0 +1,8 @@
+---
+- name: Rename — Windows
+  ansible.builtin.include_tasks: windows.yml
+  when: ansible_os_family == 'Windows'
+
+- name: Rename — Linux
+  ansible.builtin.include_tasks: linux.yml
+  when: ansible_os_family != 'Windows'

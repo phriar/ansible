@@ -1,0 +1,172 @@
+---
+# Deploy VMs from the local OVA repo to a standalone ESXi host.
+# ESXi pulls OVA files over HTTP from the autoserver nginx — no file copy needed.
+#
+# Deploy all VMs:
+#   ansible-playbook autoserver/deploy-esxi.yml --ask-vault-pass
+#
+# Deploy one group:
+#   ansible-playbook autoserver/deploy-esxi.yml --tags rhel --ask-vault-pass
+#   ansible-playbook autoserver/deploy-esxi.yml --tags windows --ask-vault-pass
+#   ansible-playbook autoserver/deploy-esxi.yml --tags vendor --ask-vault-pass
+#
+# Deploy a single VM by name:
+#   ansible-playbook autoserver/deploy-esxi.yml -e vm_filter=rocky-01 --ask-vault-pass
+#
+# Dry run:
+#   ansible-playbook autoserver/deploy-esxi.yml --check --ask-vault-pass
+
+- name: Deploy VMs to standalone ESXi
+  hosts: localhost
+  gather_facts: true
+  connection: local
+
+  vars:
+    _esxi: &esxi
+      hostname:       "{{ esxi_host }}"
+      username:       "{{ esxi_user }}"
+      password:       "{{ esxi_password }}"
+      validate_certs: false
+
+    # Pass -e vm_filter=<name> to deploy a single VM, otherwise deploys all
+    deploy_list: >-
+      {{ vms | selectattr('name', 'equalto', vm_filter) | list
+         if vm_filter is defined
+         else vms }}
+
+  tasks:
+
+    # ── Preflight ─────────────────────────────────────────────────────────────
+    - name: Verify OVA files are staged locally
+      ansible.builtin.stat:
+        path: "{{ ova_local_path }}/{{ item.ova_file }}"
+      loop: "{{ deploy_list }}"
+      loop_control:
+        label: "{{ item.name }} — {{ item.ova_file }}"
+      register: ova_checks
+      tags: always
+
+    - name: Abort — OVA not found
+      ansible.builtin.fail:
+        msg: "Stage this OVA first: {{ ova_local_path }}/{{ item.item.ova_file }}"
+      loop: "{{ ova_checks.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: not item.stat.exists
+      tags: always
+
+    # ── RHEL / Rocky Linux ────────────────────────────────────────────────────
+    # Deployed with power_on: false so hardware can be resized before first boot
+
+    - name: Deploy RHEL/Rocky VMs from OVA
+      community.vmware.vmware_deploy_ovf:
+        <<: *esxi
+        name:                "{{ item.name }}"
+        datastore:           "{{ item.datastore }}"
+        networks:            "{{ item.networks }}"
+        ovf:                 "{{ repo_base_url }}/{{ item.ova_file }}"
+        disk_provisioning:   thin
+        power_on:            false
+        wait_for_ip_address: false
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'rhel') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: rhel
+
+    - name: Reconfigure RHEL VM hardware
+      community.vmware.vmware_guest:
+        <<: *esxi
+        name:  "{{ item.name }}"
+        state: present
+        hardware:
+          memory_mb: "{{ item.memory_mb }}"
+          num_cpus:  "{{ item.num_cpus }}"
+        disk: "{{ [{'size_gb': item.disk_gb, 'unit_number': 0}] if item.disk_gb | int > 0 else omit }}"
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'rhel') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: rhel
+
+    - name: Power on RHEL VMs
+      community.vmware.vmware_guest:
+        <<: *esxi
+        name:                "{{ item.name }}"
+        state:               poweredon
+        wait_for_ip_address: "{{ item.wait_for_ip | default(true) }}"
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'rhel') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.power_on | default(true)
+      tags: rhel
+
+    # ── Windows Server ────────────────────────────────────────────────────────
+
+    - name: Deploy Windows Server VMs from OVA
+      community.vmware.vmware_deploy_ovf:
+        <<: *esxi
+        name:                "{{ item.name }}"
+        datastore:           "{{ item.datastore }}"
+        networks:            "{{ item.networks }}"
+        ovf:                 "{{ repo_base_url }}/{{ item.ova_file }}"
+        disk_provisioning:   thin
+        power_on:            false
+        wait_for_ip_address: false
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'windows') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: windows
+
+    - name: Reconfigure Windows VM hardware
+      community.vmware.vmware_guest:
+        <<: *esxi
+        name:  "{{ item.name }}"
+        state: present
+        hardware:
+          memory_mb: "{{ item.memory_mb }}"
+          num_cpus:  "{{ item.num_cpus }}"
+        disk: "{{ [{'size_gb': item.disk_gb, 'unit_number': 0}] if item.disk_gb | int > 0 else omit }}"
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'windows') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: windows
+
+    - name: Power on Windows VMs
+      community.vmware.vmware_guest:
+        <<: *esxi
+        name:                "{{ item.name }}"
+        state:               poweredon
+        wait_for_ip_address: "{{ item.wait_for_ip | default(false) }}"
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'windows') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.power_on | default(true)
+      tags: windows
+
+    # ── Vendor Appliances ─────────────────────────────────────────────────────
+    # Deployed in one step — OVF properties configure the appliance at first boot.
+    # No hardware resize: vendor OVAs manage their own disk layout.
+
+    - name: Deploy vendor appliances from OVA
+      community.vmware.vmware_deploy_ovf:
+        <<: *esxi
+        name:                "{{ item.name }}"
+        datastore:           "{{ item.datastore }}"
+        networks:            "{{ item.networks }}"
+        ovf:                 "{{ repo_base_url }}/{{ item.ova_file }}"
+        disk_provisioning:   thin
+        power_on:            "{{ item.power_on | default(true) }}"
+        wait_for_ip_address: "{{ item.wait_for_ip | default(false) }}"
+        properties:          "{{ item.ovf_properties | default({}) }}"
+      loop: "{{ deploy_list | selectattr('group', 'equalto', 'vendor') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: vendor
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    - name: Deployment summary
+      ansible.builtin.debug:
+        msg: "{{ item.name }} ({{ item.group }}) — deployed to ESXi {{ esxi_host }} | IP: {{ item.ip }}"
+      loop: "{{ deploy_list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: always

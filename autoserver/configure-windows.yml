@@ -1,0 +1,33 @@
+---
+# Post-deploy configuration for Windows Server VMs.
+# Runs the rename, network, and domain_join roles.
+# Add the VM to inventory/hosts.yml before running this.
+#
+# Run all roles on one host:
+#   ansible-playbook autoserver/configure-windows.yml -l win-server-01 --ask-vault-pass
+#
+# Run a specific role only:
+#   ansible-playbook autoserver/configure-windows.yml -l win-server-01 --tags rename --ask-vault-pass
+#   ansible-playbook autoserver/configure-windows.yml -l win-server-01 --tags network --ask-vault-pass
+#   ansible-playbook autoserver/configure-windows.yml -l win-server-01 --tags domain --ask-vault-pass
+#
+# Run on all Windows hosts:
+#   ansible-playbook autoserver/configure-windows.yml --ask-vault-pass
+#
+# Enable domain join (off by default):
+#   ansible-playbook autoserver/configure-windows.yml -l win-server-01 -e domain_join_enabled=true --ask-vault-pass
+
+- name: Configure Windows Server VMs
+  hosts: "{{ target | default('windows') }}"
+  gather_facts: true
+
+  roles:
+    - role: rename
+      tags: rename
+
+    - role: network
+      tags: network
+
+    - role: domain_join
+      when: domain_join_enabled | default(false) | bool
+      tags: domain

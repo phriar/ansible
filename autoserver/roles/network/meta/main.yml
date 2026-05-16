@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: local
+  description: Configure static IP, gateway, and DNS on Linux and Windows VMs
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions: [9]
+    - name: Windows
+      versions: [2022]
+dependencies: []

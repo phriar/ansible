@@ -1,0 +1,34 @@
+---
+# Post-deploy configuration for RHEL/Rocky Linux VMs.
+# Runs the rename, network, and domain_join roles.
+# Add the VM to inventory/hosts.yml before running this.
+#
+# Run all roles on one host:
+#   ansible-playbook autoserver/configure-rhel.yml -l rocky-01 --ask-vault-pass
+#
+# Run a specific role only:
+#   ansible-playbook autoserver/configure-rhel.yml -l rocky-01 --tags rename --ask-vault-pass
+#   ansible-playbook autoserver/configure-rhel.yml -l rocky-01 --tags network --ask-vault-pass
+#   ansible-playbook autoserver/configure-rhel.yml -l rocky-01 --tags domain --ask-vault-pass
+#
+# Run on all RHEL hosts:
+#   ansible-playbook autoserver/configure-rhel.yml --ask-vault-pass
+#
+# Enable domain join (off by default):
+#   ansible-playbook autoserver/configure-rhel.yml -l rocky-01 -e domain_join_enabled=true --ask-vault-pass
+
+- name: Configure RHEL/Rocky Linux VMs
+  hosts: "{{ target | default('rhel') }}"
+  gather_facts: true
+  become: true
+
+  roles:
+    - role: rename
+      tags: rename
+
+    - role: network
+      tags: network
+
+    - role: domain_join
+      when: domain_join_enabled | default(false) | bool
+      tags: domain

@@ -1,0 +1,9 @@
+---
+# Defaults — override in host_vars/<hostname>.yml or with -e on the CLI
+
+# Hostname to set — defaults to the inventory name
+vm_hostname: "{{ inventory_hostname }}"
+
+# DNS domain appended to /etc/hosts entry on Linux (e.g. poseidon.local)
+# Leave blank if not using a domain
+vm_domain: ""

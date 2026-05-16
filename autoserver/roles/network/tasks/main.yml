@@ -1,0 +1,15 @@
+---
+- name: Assert required variables are set
+  ansible.builtin.assert:
+    that:
+      - vm_ip | length > 0
+      - vm_gateway | length > 0
+    fail_msg: "Set vm_ip and vm_gateway in host_vars or pass with -e"
+
+- name: Network — Windows
+  ansible.builtin.include_tasks: windows.yml
+  when: ansible_os_family == 'Windows'
+
+- name: Network — Linux
+  ansible.builtin.include_tasks: linux.yml
+  when: ansible_os_family != 'Windows'

@@ -1,0 +1,16 @@
+---
+- name: Assert required variables are set
+  ansible.builtin.assert:
+    that:
+      - domain_name | length > 0
+      - domain_admin_user | length > 0
+      - domain_admin_pass | length > 0
+    fail_msg: "Set domain_name, domain_admin_user, and domain_admin_pass (use vault for the password)"
+
+- name: Domain join — Windows
+  ansible.builtin.include_tasks: windows.yml
+  when: ansible_os_family == 'Windows'
+
+- name: Domain join — Linux
+  ansible.builtin.include_tasks: linux.yml
+  when: ansible_os_family != 'Windows'

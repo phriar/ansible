@@ -1,0 +1,10 @@
+---
+# Defaults — override in group_vars/windows.yml, group_vars/rhel.yml,
+# host_vars/<hostname>.yml, or pass with -e on the CLI.
+# Sensitive values (domain_admin_pass) should live in vault.yml.
+
+domain_name:       ""   # e.g. poseidon.local
+domain_admin_user: ""   # e.g. Administrator  or  admin@poseidon.local
+domain_admin_pass: ""   # use: "{{ vault_domain_admin_pass }}" in vault.yml
+domain_ou:         ""   # optional OU path — leave blank for default Computers container
+                        # e.g. "OU=Servers,DC=poseidon,DC=local"
