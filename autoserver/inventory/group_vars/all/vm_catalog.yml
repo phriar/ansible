@@ -13,10 +13,13 @@
 #
 # Fields:
 #   ova_file      — path relative to /opt/repo/ova/ (served by local nginx)
-#   networks      — OVF network name → target ESXi/vCenter port group
+#   networks      — OVF network name → target ESXi port group name
 #   disk_gb       — resize primary OS disk after deploy; 0 = keep OVA default
 #   vcenter_folder — vCenter VM folder; ignored for ESXi-direct deploys
 #   ovf_properties — OVF env properties injected at deploy time (vendor appliances)
+#
+# Datastore : p-001-esx-XX
+# Port groups: dev-core | dev-app | dev-app-site2
 
 vms:
 
@@ -26,9 +29,9 @@ vms:
   - name: rocky-01
     group: rhel
     ova_file: rhel/rocky-9.4.ova
-    datastore: datastore1
+    datastore: p-001-esx-XX
     networks:
-      "VM Network": Management            # OVF internal name → your port group name
+      "VM Network": dev-core              # OVF internal name → ESXi port group
     memory_mb: 4096
     num_cpus: 2
     disk_gb: 50                           # 0 = keep OVA default
@@ -45,9 +48,9 @@ vms:
   - name: win-server-01
     group: windows
     ova_file: windows/windows-server-2022.ova
-    datastore: datastore1
+    datastore: p-001-esx-XX
     networks:
-      "VM Network": Management
+      "VM Network": dev-app
     memory_mb: 8192
     num_cpus: 4
     disk_gb: 100
@@ -55,7 +58,7 @@ vms:
     netmask: 255.255.255.0
     gateway: 192.168.100.1
     power_on: true
-    wait_for_ip: false                    # WinRM readiness verified in configure-windows-base.yml
+    wait_for_ip: false                    # WinRM readiness verified in configure-windows.yml
     vcenter_folder: /Datacenter/vm/Windows
 
   # ── Vendor Appliances ──────────────────────────────────────────────────────
@@ -66,9 +69,9 @@ vms:
   - name: infoblox-01
     group: vendor
     ova_file: vendor/infoblox-nios-9.0.ova
-    datastore: datastore1
+    datastore: p-001-esx-XX
     networks:
-      "LAN1": Management                  # Infoblox OVF network name
+      "LAN1": dev-core                    # Infoblox OVF network name
     memory_mb: 8192
     num_cpus: 4
     disk_gb: 0
@@ -88,9 +91,9 @@ vms:
   - name: nsx-manager-01
     group: vendor
     ova_file: vendor/nsx-manager-4.x.ova
-    datastore: datastore1
+    datastore: p-001-esx-XX
     networks:
-      "Network 1": Management             # NSX-T OVF network name — check OVA manifest if different
+      "Network 1": dev-core               # NSX-T OVF network name — check OVA manifest if different
     memory_mb: 16384
     num_cpus: 4
     disk_gb: 0
