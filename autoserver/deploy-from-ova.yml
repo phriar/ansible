@@ -1,0 +1,80 @@
+---
+# Deploy a single VM from a local OVA to a standalone ESXi host.
+# The autoserver nginx serves /opt/repo/ova/ over HTTP — ESXi pulls the OVA
+# directly from that URL, no manual file copy needed.
+#
+# 1. Edit vars/deploy-from-ova.yml with your VM specs
+# 2. Run:
+#    ansible-playbook autoserver/deploy-from-ova.yml --ask-vault-pass
+#
+# Or override any var on the CLI without editing the file:
+#    ansible-playbook autoserver/deploy-from-ova.yml \
+#      -e vm_name=test-01 -e vm_ova=rhel/rocky-9.4.ova \
+#      --ask-vault-pass
+
+- name: Deploy VM from OVA to ESXi
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars_files:
+    - vars/deploy-from-ova.yml
+
+  vars:
+    _esxi: &esxi
+      hostname:       "{{ esxi_host }}"
+      username:       "{{ esxi_user }}"
+      password:       "{{ esxi_password }}"
+      validate_certs: false
+
+  tasks:
+
+    - name: Check OVA exists on this server
+      ansible.builtin.stat:
+        path: "{{ ova_local_path }}/{{ vm_ova }}"
+      register: ova_stat
+
+    - name: Abort if OVA not found
+      ansible.builtin.fail:
+        msg: "OVA not found at {{ ova_local_path }}/{{ vm_ova }} — copy it there first"
+      when: not ova_stat.stat.exists
+
+    - name: Deploy OVA to ESXi
+      community.vmware.vmware_deploy_ovf:
+        <<: *esxi
+        name:                "{{ vm_name }}"
+        datastore:           "{{ vm_datastore }}"
+        networks:
+          "VM Network":      "{{ vm_portgroup }}"
+        ovf:                 "{{ repo_base_url }}/{{ vm_ova }}"
+        disk_provisioning:   thin
+        power_on:            false
+        wait_for_ip_address: false
+      register: deploy_result
+
+    - name: Reconfigure hardware
+      community.vmware.vmware_guest:
+        <<: *esxi
+        name:  "{{ vm_name }}"
+        state: present
+        hardware:
+          memory_mb: "{{ vm_memory_mb }}"
+          num_cpus:  "{{ vm_num_cpus }}"
+        disk: "{{ [{'size_gb': vm_disk_gb, 'unit_number': 0}] if vm_disk_gb | int > 0 else omit }}"
+
+    - name: Power on VM
+      community.vmware.vmware_guest:
+        <<: *esxi
+        name:  "{{ vm_name }}"
+        state: poweredon
+      when: vm_power_on | bool
+
+    - name: Done
+      ansible.builtin.debug:
+        msg:
+          - "VM    : {{ vm_name }}"
+          - "OVA   : {{ vm_ova }}"
+          - "Host  : {{ esxi_host }}"
+          - "Store : {{ vm_datastore }}"
+          - "Net   : {{ vm_portgroup }}"
+          - "Spec  : {{ vm_num_cpus }} vCPU / {{ vm_memory_mb }} MB RAM / {{ vm_disk_gb }} GB disk"

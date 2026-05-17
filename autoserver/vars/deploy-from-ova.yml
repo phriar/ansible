@@ -1,0 +1,23 @@
+---
+# Edit these values before running deploy-from-ova.yml
+# Run: ansible-playbook autoserver/deploy-from-ova.yml --ask-vault-pass
+
+# ── VM identity ───────────────────────────────────────────────────────────────
+vm_name:      "my-server-01"          # display name in ESXi
+
+# ── Source OVA ────────────────────────────────────────────────────────────────
+# Path relative to /opt/repo/ova/ — this is served by nginx on the autoserver
+vm_ova:       "rhel/rocky-9.4.ova"   # e.g. windows/windows-server-2022.ova
+                                      #      vendor/infoblox-nios-9.0.ova
+
+# ── Target ESXi placement ─────────────────────────────────────────────────────
+vm_datastore: "p-001-esx-XX"         # datastore name as shown in ESXi UI
+vm_portgroup: "dev-core"             # port group: dev-core | dev-app | dev-app-site2
+
+# ── Hardware ──────────────────────────────────────────────────────────────────
+vm_memory_mb: 4096                   # RAM in MB  (4096 = 4 GB, 8192 = 8 GB)
+vm_num_cpus:  2                      # vCPU count
+vm_disk_gb:   50                     # resize primary disk in GB — set 0 to keep OVA default
+
+# ── Power ─────────────────────────────────────────────────────────────────────
+vm_power_on:  true                   # power on after deploy
