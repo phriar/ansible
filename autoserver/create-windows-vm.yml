@@ -1,0 +1,123 @@
+---
+# Phase 1 of 2 — Create a blank Windows VM and mount the ISO so you can install.
+#
+# What this does:
+#   1. Uploads the Windows ISO from /opt/repo/iso/ to the ESXi datastore
+#   2. Creates a blank VM with the hardware you specified
+#   3. Attaches the ISO as a CD-ROM and sets boot order to CD first
+#   4. Powers on the VM
+#
+# What you do next:
+#   - Open the VM console in the ESXi UI
+#   - Install Windows
+#   - Install VMware Tools
+#   - Run sysprep (C:\Windows\System32\Sysprep\sysprep.exe)
+#       Options: Enter System Out-of-Box Experience, Generalize, Shutdown
+#   - Once the VM is powered off, run:
+#       ansible-playbook autoserver/convert-to-template.yml \
+#         -e vm_name=win2022-template --ask-vault-pass
+#
+# Usage:
+#   ansible-playbook autoserver/create-windows-vm.yml --ask-vault-pass
+
+- name: Create Windows VM and mount ISO
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars_files:
+    - vars/build-windows-template.yml
+
+  vars:
+    _esxi: &esxi
+      hostname:       "{{ esxi_host }}"
+      username:       "{{ esxi_user }}"
+      password:       "{{ esxi_password }}"
+      validate_certs: false
+
+  tasks:
+
+    # ── Preflight ─────────────────────────────────────────────────────────────
+    - name: Check ISO exists on this server
+      ansible.builtin.stat:
+        path: "/opt/repo/iso/{{ vm_iso }}"
+      register: iso_stat
+
+    - name: Abort if ISO not found
+      ansible.builtin.fail:
+        msg: "Copy the ISO to /opt/repo/iso/{{ vm_iso }} first"
+      when: not iso_stat.stat.exists
+
+    # ── Upload ISO to ESXi datastore ──────────────────────────────────────────
+    # ESXi cannot stream an ISO from HTTP — it needs to be on the datastore.
+    # This step copies it from the autoserver. Large files take several minutes.
+    - name: Upload ISO to ESXi datastore
+      community.vmware.vsphere_copy:
+        <<: *esxi
+        src:       "/opt/repo/iso/{{ vm_iso }}"
+        datacenter: ha-datacenter
+        datastore: "{{ vm_datastore }}"
+        path:      "iso/{{ vm_iso }}"
+
+    # ── Create VM ─────────────────────────────────────────────────────────────
+    - name: Create blank Windows VM
+      community.vmware.vmware_guest:
+        <<: *esxi
+        datacenter: ha-datacenter
+        name:       "{{ vm_name }}"
+        datastore:  "{{ vm_datastore }}"
+        guest_id:   "{{ vm_guest_id }}"
+        hardware:
+          memory_mb: "{{ vm_memory_mb }}"
+          num_cpus:  "{{ vm_num_cpus }}"
+          scsi:      lsilogicsas          # works with Windows installer without extra drivers
+        disk:
+          - size_gb:  "{{ vm_disk_gb }}"
+            type:     thin
+            datastore: "{{ vm_datastore }}"
+        networks:
+          - name:        "{{ vm_portgroup }}"
+            device_type: vmxnet3
+        cdrom:
+          - controller_type:   ide
+            controller_number: 0
+            unit_number:       0
+            state:             present
+            type:              iso
+            iso_path:          "[{{ vm_datastore }}] iso/{{ vm_iso }}"
+        boot:
+          boot_firmware: bios
+          boot_order:
+            - cdrom
+            - disk
+            - ethernet
+        state: present
+
+    # ── Power on ──────────────────────────────────────────────────────────────
+    - name: Power on VM
+      community.vmware.vmware_guest:
+        <<: *esxi
+        datacenter: ha-datacenter
+        name:       "{{ vm_name }}"
+        state:      poweredon
+
+    # ── Instructions ──────────────────────────────────────────────────────────
+    - name: Next steps
+      ansible.builtin.debug:
+        msg:
+          - "======================================================="
+          - " VM '{{ vm_name }}' is booting from the Windows ISO"
+          - "======================================================="
+          - ""
+          - " 1. Open the ESXi UI and launch the VM console"
+          - " 2. Complete the Windows installation"
+          - " 3. Install VMware Tools (Actions > Guest OS > Install VMware Tools)"
+          - " 4. Run sysprep to generalise the image:"
+          - "      C:\\Windows\\System32\\Sysprep\\sysprep.exe"
+          - "      - Mode:    Enter System Out-of-Box Experience (OOBE)"
+          - "      - Options: Generalize (checked)"
+          - "      - Shutdown: Shutdown"
+          - " 5. Wait for the VM to power off, then run:"
+          - "      ansible-playbook autoserver/convert-to-template.yml \\"
+          - "        -e vm_name={{ vm_name }} --ask-vault-pass"
+          - "======================================================="

@@ -1,0 +1,26 @@
+---
+# Vars for create-windows-vm.yml
+# Run: ansible-playbook autoserver/create-windows-vm.yml --ask-vault-pass
+
+# ── VM identity ───────────────────────────────────────────────────────────────
+vm_name:      "win2022-template"      # name in ESXi
+
+# ── Windows ISO ───────────────────────────────────────────────────────────────
+# Filename inside /opt/repo/iso/ on the autoserver.
+# The playbook uploads it to the ESXi datastore before creating the VM.
+vm_iso:       "windows-server-2022.iso"
+
+# ── Target ESXi placement ─────────────────────────────────────────────────────
+vm_datastore: "p-001-esx-XX"
+vm_portgroup: "dev-core"
+
+# ── Guest OS type ─────────────────────────────────────────────────────────────
+# windows2019srvNext_64Guest = Windows Server 2022
+# windows2019srv_64Guest     = Windows Server 2019
+# windows9Server64Guest      = Windows Server 2016
+vm_guest_id:  "windows2019srvNext_64Guest"
+
+# ── Hardware ──────────────────────────────────────────────────────────────────
+vm_memory_mb: 8192                    # 8 GB — enough for install + updates
+vm_num_cpus:  4
+vm_disk_gb:   80                      # OS disk size in GB

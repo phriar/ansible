@@ -1,0 +1,80 @@
+---
+# Phase 2 of 2 — Convert a powered-off VM to a template.
+# Run this after Windows is installed, VMware Tools installed, and sysprep complete.
+#
+# Usage:
+#   ansible-playbook autoserver/convert-to-template.yml \
+#     -e vm_name=win2022-template --ask-vault-pass
+
+- name: Convert VM to template
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars:
+    vm_name: ""    # required — pass with -e vm_name=<name>
+
+  tasks:
+
+    - name: Assert vm_name was provided
+      ansible.builtin.assert:
+        that: vm_name | length > 0
+        fail_msg: "Provide the VM name: -e vm_name=<name>"
+
+    # ── Graceful shutdown ─────────────────────────────────────────────────────
+    # Tries a clean shutdown first. If VMware Tools is not running or the VM
+    # is already off, the task is silently skipped.
+    - name: Request graceful shutdown
+      community.vmware.vmware_guest:
+        hostname:       "{{ esxi_host }}"
+        username:       "{{ esxi_user }}"
+        password:       "{{ esxi_password }}"
+        validate_certs: false
+        datacenter:     ha-datacenter
+        name:           "{{ vm_name }}"
+        state:          shutdownguest
+      failed_when: false
+
+    - name: Wait up to 2 minutes for graceful shutdown
+      ansible.builtin.pause:
+        seconds: 120
+        prompt:  "Waiting for {{ vm_name }} to shut down — press Enter to skip the wait"
+
+    # ── Force off if still running ────────────────────────────────────────────
+    - name: Force power off (in case graceful shutdown did not complete)
+      community.vmware.vmware_guest:
+        hostname:       "{{ esxi_host }}"
+        username:       "{{ esxi_user }}"
+        password:       "{{ esxi_password }}"
+        validate_certs: false
+        datacenter:     ha-datacenter
+        name:           "{{ vm_name }}"
+        state:          poweredoff
+      failed_when: false
+
+    # ── Convert ───────────────────────────────────────────────────────────────
+    - name: Convert VM to template
+      community.vmware.vmware_guest:
+        hostname:       "{{ esxi_host }}"
+        username:       "{{ esxi_user }}"
+        password:       "{{ esxi_password }}"
+        validate_certs: false
+        datacenter:     ha-datacenter
+        name:           "{{ vm_name }}"
+        is_template:    true
+        state:          present
+      register: template_result
+
+    - name: Done
+      ansible.builtin.debug:
+        msg:
+          - "======================================================="
+          - " '{{ vm_name }}' is now a template in ESXi"
+          - "======================================================="
+          - " Deploy from it using deploy-from-ova.yml (after exporting"
+          - " the template as an OVA to /opt/repo/ova/)"
+          - ""
+          - " To export the template to OVA:"
+          - "   Right-click the template in ESXi > Export > OVF Template"
+          - "   Save the .ova to /opt/repo/ova/windows/"
+          - "======================================================="
