@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Active work
+
+Bringing up the autoserver against a real vCenter environment this week — see `docs/bringup-plan.md` for the day-by-day plan (started 2026-09-12). At the start of a session in this repo, remind the user which day/step they're on. Remove this section once the plan is complete.
+
 ## Commands
 
 ```bash
