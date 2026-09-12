@@ -1,6 +1,6 @@
 # Autoserver Bring-Up Plan — 6 Days
 
-A day-by-day plan for standing up the autoserver against a real vCenter environment and getting the first template-clone-and-configure loop working, at 3–5 hrs/day.
+A day-by-day plan for standing up the autoserver against a real vCenter environment and getting a repeatable template-clone-and-configure loop working for **both a Windows and a RHEL/Rocky VM**, at 3–5 hrs/day.
 
 **Context worth knowing before you start:** most of the playbooks this plan uses already exist in this repo — `deploy-esxi.yml`, `deploy-vcenter.yml`, `deploy-vm-template.yml`, `configure-rhel.yml`, `configure-windows.yml`, plus the `rename`/`network`/`domain_join` roles. This week is mostly about *building the real box* and *validating those playbooks against your actual vCenter*, not writing everything from a blank file. Where a day says "write," read it as "adapt and test" unless noted otherwise.
 
@@ -37,49 +37,58 @@ Follow `docs/ubuntu-ansible-setup.md` sections 4–6.
 
 ## Day 3 — vCenter connectivity
 
-This is the first day touching your real vCenter, so budget time for credential/permissions back-and-forth.
+This is the first day touching your real vCenter, so budget time for credential/permissions back-and-forth. Goal for today is to leave with **both** template names confirmed and ready — Windows and RHEL run in parallel from here on.
 
 - [ ] Get a vCenter service account (or your own creds) with rights to deploy/clone/power VMs in the target folder
 - [ ] `ansible-vault edit autoserver/inventory/group_vars/all/vault.yml` — set `vault_vcenter_password` (and `vault_esxi_password` if you'll also test standalone ESXi). Encrypt the file if it isn't already (`ansible-vault encrypt ...`) — **do not commit it in plaintext**
 - [ ] Update `autoserver/inventory/group_vars/all/vars.yml`: `vcenter_host`, `vcenter_user`, `vcenter_datacenter`, `vcenter_cluster`, `vcenter_folder` to match your environment
 - [ ] Sanity-check auth without touching any VM — e.g. `community.vmware.vcenter_about_info` or `community.vmware.vmware_vm_info` in an ad-hoc play
-- [ ] Find the real name of the template you'll clone from (or confirm one exists / needs to be built) — you'll need this for `vm_template` in `autoserver/vars/deploy-vm-template.yml`
+- [ ] Find the real name of the **RHEL/Rocky template** — you'll need this for `vm_template` in `autoserver/vars/deploy-vm-template.yml`
+- [ ] Find the real name of the **Windows Server template**, and confirm whether WinRM is already enabled on it (see the WinRM Prep Script in `docs/autoserver-design.md`). If it isn't, that's extra prep work — plan to knock it out today or first thing Day 4, since `configure-windows.yml` can't connect without it
+- [ ] Confirm the Windows template has sysprep available/unattended answer file settings you'll need (`vm_is_windows: true` path in `deploy-vm-template.yml`) — product key, timezone index, etc.
 
-**Done when:** an ad-hoc Ansible task against vCenter authenticates and returns real inventory data (cluster/datastore/template names) — no VM changes yet.
-
----
-
-## Day 4 — Deploy a VM from the template
-
-Now exercise `autoserver/deploy-vm-template.yml` for real.
-
-- [ ] Fill in `autoserver/vars/deploy-vm-template.yml`: `vm_template`, `vcenter_datastore`, `vcenter_esxi_host`/`vcenter_cluster`, `vm_network_label`, `vm_ip`/`vm_netmask`/`vm_gateway`/`vm_dns_servers`
-- [ ] Confirm the template has `open-vm-tools` + `perl` (Linux) so guest customization works — see `docs/deploy-vm-template.md` if it's missing
-- [ ] Dry run: `ansible-playbook autoserver/deploy-vm-template.yml --check --diff`
-- [ ] Real run: `ansible-playbook autoserver/deploy-vm-template.yml -e vm_name=<name> -e vm_ip=<ip>`
-- [ ] Add the new VM to `autoserver/inventory/hosts.yml` under the right group (`rhel`/`windows`)
-- [ ] Confirm SSH (or WinRM) into the freshly cloned VM
-
-**Done when:** a VM cloned from the template boots with the hostname/IP you specified and you can log into it.
+**Done when:** an ad-hoc Ansible task against vCenter authenticates and returns real inventory data, and you have both template names plus confirmation the Windows template's WinRM is ready — no VM changes yet.
 
 ---
 
-## Day 5 — Post-deploy configuration
+## Day 4 — Deploy both VMs from template
 
-Exercise `configure-rhel.yml` (or `configure-windows.yml`) against the VM from Day 4.
+Exercise `autoserver/deploy-vm-template.yml` for both OS types today, back to back.
 
-- [ ] `ansible-playbook autoserver/configure-rhel.yml -l <vm_name> --ask-vault-pass` (or your vault-password-file)
-- [ ] Verify each role independently if something fails: `--tags rename`, `--tags network`, `--tags domain` (domain join is off by default — `-e domain_join_enabled=true` to test it, see `docs/windows-domain-join.md`)
-- [ ] Fix whatever breaks against your real environment — DNS, gateway reachability, sudo/WinRM auth, AD join permissions are the usual suspects
-- [ ] Re-run `ansible rhel -m ansible.builtin.ping` (or `win_ping`) to confirm idempotency — running it twice shouldn't change anything the second time
+**RHEL/Rocky:**
+- [ ] Fill in a RHEL var set for `deploy-vm-template.yml`: `vm_template`, `vcenter_datastore`, `vcenter_esxi_host`/`vcenter_cluster`, `vm_network_label`, `vm_ip`/`vm_netmask`/`vm_gateway`/`vm_dns_servers`, `vm_is_windows: false`
+- [ ] Confirm the template has `open-vm-tools` + `perl` so guest customization works — see `docs/deploy-vm-template.md` if it's missing
+- [ ] Dry run (`--check --diff`), then real run: `ansible-playbook autoserver/deploy-vm-template.yml -e vm_name=<name> -e vm_ip=<ip>`
+- [ ] Add it to `autoserver/inventory/hosts.yml` under `rhel`, confirm SSH
 
-**Done when:** `deploy-vm-template.yml` → `configure-rhel.yml` is a clean, repeatable, two-command loop from template to configured VM.
+**Windows:**
+- [ ] Same, with `vm_is_windows: true` and the Windows template name, product key/timezone index, `vm_network_label`/IP settings for that VM
+- [ ] Dry run, then real run
+- [ ] Add it to `autoserver/inventory/hosts.yml` under `windows`, confirm WinRM: `ansible <win_vm_name> -m ansible.windows.win_ping --ask-vault-pass`
+
+If one side stalls (a vCenter quirk, a missing template setting), don't let it block the other — get whichever one is working done first, then come back.
+
+**Done when:** you have one running RHEL VM and one running Windows VM, both cloned from their real vCenter templates today, both reachable.
+
+---
+
+## Day 5 — Post-deploy configuration, both OSes
+
+Exercise `configure-rhel.yml` and `configure-windows.yml` against yesterday's two VMs.
+
+- [ ] `ansible-playbook autoserver/configure-rhel.yml -l <rhel_vm_name> --ask-vault-pass`
+- [ ] `ansible-playbook autoserver/configure-windows.yml -l <win_vm_name> --ask-vault-pass`
+- [ ] Verify roles independently if something fails: `--tags rename`, `--tags network`, `--tags domain` (domain join is off by default — `-e domain_join_enabled=true` to test it, see `docs/windows-domain-join.md`)
+- [ ] Fix whatever breaks against your real environment — DNS, gateway reachability, sudo/WinRM auth, AD join permissions are the usual suspects, and they tend to differ between the two OSes
+- [ ] Re-run both against their already-configured VMs to confirm idempotency — running twice shouldn't change anything the second time
+
+**Done when:** `deploy-vm-template.yml` → `configure-rhel.yml`/`configure-windows.yml` is a clean, repeatable, two-command loop for **both** OS types, from template to configured VM.
 
 ---
 
 ## Day 6 — Buffer, offline validation, and write down what changed
 
-- [ ] Catch-up day for whatever slipped from Days 3–5 (vCenter permission issues eat time — budget for it)
+- [ ] Catch-up day for whatever slipped from Days 3–5 — with both OSes in scope this week, this is the day that absorbs it; if only one of RHEL/Windows made it through Day 5 clean, this is where the other one gets finished
 - [ ] If there's time: sketch what an offline RPM/dnf mirror for the RHEL/Rocky targets would need (`reposync` + `createrepo` on a box with internet, staged the same way `bootstrap.sh` stages debs) — this repo doesn't have one yet and `configure-rhel.yml`'s `dnf` tasks will need it once you're actually air-gapped
 - [ ] Commit and push everything: updated `vars.yml`, `vm_catalog.yml`, `hosts.yml`, vault (encrypted), any playbook fixes
 - [ ] Update `docs/autoserver-design.md` and this plan with anything that turned out differently than documented (template name, real IP ranges, permission gotchas) — future-you (and the air-gapped rebuild) will need it accurate
