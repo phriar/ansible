@@ -93,7 +93,8 @@ Internet-connected              Air-gapped network
 | `docs/autoserver-design.md` | Full design doc, architecture, pre-export checklist, quick reference |
 | `docs/windows-domain-join.md` | Domain join runbook for `poseidon.local` |
 | `docs/deploy-vm-template.md` | Reference for the vCenter template-clone approach |
-| `docs/ubuntu-ansible-setup.md` | Setting up Ubuntu as an Ansible control node |
+| `docs/ubuntu-ansible-setup.md` | Building the autoserver: VM creation through Ansible install and VSCode connect |
+| `docs/bringup-plan.md` | Day-by-day plan for standing up the autoserver against real vCenter |
 
 ## Requirements
 
