@@ -99,6 +99,7 @@ Internet-connected              Air-gapped network
 | `docs/deploy-vm-template.md` | Reference for the vCenter template-clone approach |
 | `docs/ubuntu-ansible-setup.md` | Building the autoserver: VM creation through Ansible install and VSCode connect |
 | `docs/bringup-plan.md` | Day-by-day plan for standing up the autoserver against real vCenter |
+| `docs/devsecops-learning-path.md` | Curated video list explaining the code-check + config-check pipeline concept |
 
 ## Requirements
 
