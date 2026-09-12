@@ -27,8 +27,8 @@ ansible-playbook deploy-esxi.yml -e vm_filter=infoblox-01 --ask-vault-pass
 ansible-playbook deploy-vcenter.yml --ask-vault-pass
 
 # Configure deployed VMs post-deploy
-ansible-playbook configure-rhel-base.yml -l rocky-01 --ask-vault-pass
-ansible-playbook configure-windows-base.yml -l win-server-01 --ask-vault-pass
+ansible-playbook configure-rhel.yml -l rocky-01 --ask-vault-pass
+ansible-playbook configure-windows.yml -l win-server-01 --ask-vault-pass
 
 # Clone a VM from a vCenter template (alternative to OVA deploy)
 ansible-playbook deploy-vm-template.yml --ask-vault-pass
@@ -65,8 +65,8 @@ Internet-connected              Air-gapped network
 | `deploy-esxi.yml` | Deploy VMs from local OVA repo to standalone ESXi |
 | `deploy-vcenter.yml` | Deploy VMs from local OVA repo to vCenter |
 | `deploy-vm-template.yml` | Clone a VM from a vCenter template (non-OVA approach) |
-| `configure-rhel-base.yml` | Post-deploy hardening for RHEL/Rocky VMs |
-| `configure-windows-base.yml` | Post-deploy config for Windows Server VMs |
+| `configure-rhel.yml` | Post-deploy hardening for RHEL/Rocky VMs |
+| `configure-windows.yml` | Post-deploy config for Windows Server VMs |
 
 **VM Catalog (`autoserver/inventory/group_vars/all/vm_catalog.yml`):** Single source of truth for every VM — name, group, OVA path, datastore, port group, memory, CPU, disk, IP, OVF properties. The deploy playbooks loop over this list. Deploy by group with `--tags rhel/windows/vendor` or a single VM with `-e vm_filter=<name>`.
 

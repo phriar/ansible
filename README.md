@@ -1,23 +1,34 @@
 # Ansible Infrastructure
 
-This repository contains Ansible playbooks, roles, and inventories for managing infrastructure across staging and production environments.
+This repository builds the **autoserver** — an Ubuntu VM that acts as both an Ansible control node and an nginx OVA/ISO file server. It's designed to be built on an internet-connected network, staged with OVAs/ISOs and Galaxy collections, exported as an OVA, then deployed into an air-gapped network where it drives all further VM deployment and configuration offline.
+
+```
+Internet-connected              Air-gapped network
+──────────────────              ──────────────────
+1. Build Ubuntu VM              5. Deploy autoserver OVA to ESXi
+2. Run bootstrap.sh             6. Boot — everything works offline
+3. Stage OVAs and ISOs          7. Run playbooks to deploy all VMs
+4. Export as OVA  ─────────────────────────────────────────▶
+```
 
 ---
 
 ## Quick start
 
 ```bash
-# 1. Install required Galaxy collections and roles
-ansible-galaxy install -r requirements.yml
+# 1. Install required Galaxy collections
+ansible-galaxy collection install -r requirements.yml
+
+cd autoserver
 
 # 2. Encrypt the vault file before committing
-ansible-vault encrypt group_vars/all/vault.yml
+ansible-vault encrypt inventory/group_vars/all/vault.yml
 
-# 3. Dry-run against staging
-ansible-playbook -i inventories/staging playbooks/site.yml --check
+# 3. Dry-run against standalone ESXi
+ansible-playbook deploy-esxi.yml --check --diff --ask-vault-pass
 
-# 4. Run for real
-ansible-playbook -i inventories/production playbooks/site.yml
+# 4. Deploy for real
+ansible-playbook deploy-esxi.yml --ask-vault-pass
 ```
 
 ---
@@ -26,140 +37,122 @@ ansible-playbook -i inventories/production playbooks/site.yml
 
 ```
 .
-├── ansible.cfg                 # Global Ansible settings (SSH, privilege escalation, output format)
-├── requirements.yml            # Galaxy collections and roles to install before running
-├── .gitignore                  # Excludes vault files, .retry files, keys, and certs
+├── ansible.cfg                          # Global Ansible settings
+├── requirements.yml                     # Galaxy collections required before running
+├── .gitignore                           # Excludes vault files, .retry files, keys, and certs
 │
-├── inventories/                # One subdirectory per environment
-│   ├── production/
-│   │   ├── hosts.ini           # Host groups and connection details for production
-│   │   ├── group_vars/         # Variables that apply to all hosts in production
-│   │   │   └── all.yml         # Env-specific overrides (env name, NTP, DNS)
-│   │   └── host_vars/          # Variables scoped to a single host (add <hostname>.yml files here)
-│   └── staging/
-│       ├── hosts.ini           # Staging host groups
-│       ├── group_vars/
-│       │   └── all.yml
-│       └── host_vars/
+├── autoserver/                          # The project — everything runs from here
+│   ├── bootstrap.sh                     # Run once, as root, on the internet-connected build VM
+│   │
+│   ├── deploy-esxi.yml                  # Deploy VMs from local OVA repo to standalone ESXi
+│   ├── deploy-vcenter.yml               # Deploy VMs from local OVA repo to vCenter
+│   ├── deploy-vm-template.yml           # Clone a VM from a vCenter template (non-OVA approach)
+│   ├── deploy-from-ova.yml              # Deploy a single VM from an OVA
+│   ├── create-windows-vm.yml            # Build a Windows VM from scratch
+│   ├── convert-to-template.yml          # Convert a built VM into a reusable vCenter template
+│   ├── configure-rhel.yml               # Post-deploy hardening for RHEL/Rocky VMs
+│   ├── configure-windows.yml            # Post-deploy config for Windows Server VMs
+│   │
+│   ├── inventory/
+│   │   ├── hosts.yml                    # esxi / rhel / windows / vendor host groups
+│   │   └── group_vars/all/
+│   │       ├── vars.yml                 # ESXi/vCenter connection info, nginx repo URL, NTP
+│   │       ├── vm_catalog.yml           # Single source of truth for every VM to deploy
+│   │       └── vault.yml                # Encrypted secrets — MUST be encrypted with ansible-vault
+│   │
+│   ├── roles/
+│   │   ├── rename/                      # Sets hostname (Windows + Linux)
+│   │   ├── network/                     # Applies static IP/gateway (Windows + Linux)
+│   │   └── domain_join/                 # Joins a VM to the poseidon.local AD domain
+│   │
+│   ├── vars/                            # Extra-vars files for the create/convert/deploy playbooks
+│   ├── scripts/                         # Helper scripts
+│   └── templates/                       # Jinja2 templates
 │
-├── group_vars/                 # Variables loaded for every host regardless of environment
-│   └── all/
-│       ├── vars.yml            # Non-sensitive global defaults (packages, sysctl, etc.)
-│       └── vault.yml           # Encrypted secrets — MUST be encrypted with ansible-vault
-│
-├── host_vars/                  # Host-specific variables not tied to a specific inventory
-│
-├── playbooks/                  # Entry points — what you run with ansible-playbook
-│   ├── site.yml                # Master playbook: imports all others in order
-│   ├── common.yml              # Applies baseline config (packages, NTP, sysctl) to every host
-│   ├── webservers.yml          # Configures the [webservers] group
-│   └── databases.yml           # Configures the [databases] group
-│
-└── roles/                      # Reusable units of configuration
-    ├── common/                 # Applied to every host; establishes baseline OS state
-    │   ├── tasks/main.yml      # Task list: install packages, set timezone, apply sysctl
-    │   ├── handlers/main.yml   # Triggered on change: restart NTP, cron
-    │   ├── templates/          # Jinja2 templates rendered onto hosts
-    │   │   └── ntp.conf.j2     # NTP config — uses ntp_servers variable
-    │   ├── files/              # Static files copied verbatim to hosts
-    │   ├── defaults/main.yml   # Role defaults — lowest priority, safe to override anywhere
-    │   ├── vars/main.yml       # Role vars — high priority, not intended for override
-    │   └── meta/main.yml       # Role metadata: author, platform support, dependencies
-    │
-    └── webserver/              # Installs and configures nginx
-        ├── tasks/main.yml      # Install nginx, deploy configs, enable vhosts, start service
-        ├── handlers/main.yml   # Reload/restart nginx on config change
-        ├── templates/
-        │   ├── nginx.conf.j2   # Main nginx config — uses webserver_worker_* variables
-        │   └── vhost.conf.j2   # Per-vhost config — loops over webserver_vhosts list
-        ├── files/              # Static assets (certs, custom error pages, etc.)
-        ├── defaults/main.yml   # Port, worker settings, vhost list defaults
-        ├── vars/main.yml       # High-priority role vars (empty by default)
-        └── meta/main.yml       # Declares dependency on the common role
+└── docs/
+    ├── autoserver-design.md             # Full design doc, architecture, pre-export checklist
+    ├── windows-domain-join.md           # Domain join runbook for poseidon.local
+    ├── deploy-vm-template.md            # Reference for the vCenter template-clone approach
+    ├── ubuntu-ansible-setup.md          # Setting up Ubuntu as an Ansible control node
+    └── user-guide.md                    # Day-to-day workflow
 ```
 
 ---
 
-## Inventories
+## VM catalog
 
-Switch environments by passing `-i inventories/<env>` to `ansible-playbook`. Variables in `inventories/<env>/group_vars/` override global `group_vars/` for that environment only.
+`autoserver/inventory/group_vars/all/vm_catalog.yml` is the single source of truth for every VM — name, group, OVA path, datastore, port group, memory, CPU, disk, IP, OVF properties. The deploy playbooks loop over this list.
+
+| Name | Group |
+|---|---|
+| `rocky-01` | rhel |
+| `win-server-01` | windows |
+| `infoblox-01` | vendor |
+| `nsx-manager-01` | vendor |
 
 ```bash
-ansible-playbook -i inventories/staging  playbooks/site.yml
-ansible-playbook -i inventories/production playbooks/site.yml
+# Deploy everything
+ansible-playbook deploy-esxi.yml --ask-vault-pass
+
+# Deploy one group
+ansible-playbook deploy-esxi.yml --tags rhel --ask-vault-pass
+
+# Deploy a single VM by name
+ansible-playbook deploy-esxi.yml -e vm_filter=infoblox-01 --ask-vault-pass
 ```
 
-To add a new host, edit the relevant `hosts.ini` and optionally add a `host_vars/<hostname>.yml` for host-specific overrides.
+---
+
+## Variable precedence (low → high)
+
+1. `autoserver/inventory/group_vars/all/vars.yml` — ESXi/vCenter connection, nginx repo URL, NTP
+2. `autoserver/inventory/group_vars/all/vm_catalog.yml` — per-VM specs
+3. `autoserver/inventory/group_vars/all/vault.yml` — encrypted secrets
+4. CLI `-e` extra vars
 
 ---
 
 ## Vault (secrets)
 
-All secrets live in `group_vars/all/vault.yml`. The convention is to prefix every vault variable with `vault_` and reference it from a plain var in `vars.yml`:
-
-```yaml
-# group_vars/all/vars.yml
-db_root_password: "{{ vault_db_root_password }}"
-
-# group_vars/all/vault.yml  (encrypted)
-vault_db_root_password: "s3cr3t"
-```
-
-Common vault commands:
+All secrets live in `autoserver/inventory/group_vars/all/vault.yml`, prefixed with `vault_`, and are gitignored until encrypted.
 
 ```bash
 # Encrypt (do this before first commit)
-ansible-vault encrypt group_vars/all/vault.yml
-
-# View without decrypting to disk
-ansible-vault view group_vars/all/vault.yml
+ansible-vault encrypt autoserver/inventory/group_vars/all/vault.yml
 
 # Edit in place
-ansible-vault edit group_vars/all/vault.yml
+ansible-vault edit autoserver/inventory/group_vars/all/vault.yml
 
-# Run a playbook with vault (will prompt for password)
-ansible-playbook playbooks/site.yml --ask-vault-pass
-
-# Or use a password file (don't commit this file)
-ansible-playbook playbooks/site.yml --vault-password-file ~/.vault_pass
+# Run a playbook with vault (prompts for password)
+ansible-playbook deploy-esxi.yml --ask-vault-pass
 ```
 
 ---
 
 ## Roles
 
-| Role | Purpose | Key variables |
-|---|---|---|
-| `common` | Baseline OS config applied to every host | `common_packages`, `timezone`, `ntp_servers`, `sysctl_settings` |
-| `webserver` | nginx install + vhost management | `webserver_vhosts`, `webserver_port`, `webserver_worker_processes` |
-
-### Adding a new role
-
-```bash
-ansible-galaxy role init roles/<role_name>
-```
-
-Then add it to the appropriate playbook under `roles:`.
+| Role | Purpose |
+|---|---|
+| `rename` | Sets the hostname on a deployed VM (Windows or Linux) |
+| `network` | Applies static IP/gateway from `vm_catalog.yml` (Windows or Linux) |
+| `domain_join` | Joins a VM to the `poseidon.local` AD domain — see `docs/windows-domain-join.md` |
 
 ---
 
-## Running specific parts
+## Connectivity checks
 
 ```bash
-# Only run tasks tagged "packages"
-ansible-playbook playbooks/site.yml --tags packages
-
-# Only target one host
-ansible-playbook playbooks/site.yml --limit web01.example.com
-
-# Dry-run with diff
-ansible-playbook playbooks/site.yml --check --diff
+ansible rhel    -m ansible.builtin.ping
+ansible windows -m ansible.windows.win_ping --ask-vault-pass
 ```
 
 ---
 
 ## Requirements
 
-- Ansible >= 2.14
-- Python >= 3.9 on control node
-- `ansible-galaxy install -r requirements.yml` run before first use
+- Ansible >= 2.14, Python >= 3.9 on the control node
+- SSH key at `~/.ssh/id_ed25519` (or `~/.ssh/ansible_id_rsa` on the autoserver)
+- Remote user `ansible` with passwordless sudo on Linux targets; WinRM with NTLM on Windows
+- Collections in `requirements.yml`: `community.vmware`, `ansible.windows`, `community.windows`, `ansible.posix`, `community.general`, `microsoft.ad` — all cached offline by `bootstrap.sh`
+
+See `docs/autoserver-design.md` for the full design doc and pre-export checklist.
